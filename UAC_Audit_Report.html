@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UAC Audit Report – Man Matters 2.0</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  :root {
+    --blue: #1a73e8;
+    --green: #34a853;
+    --red: #ea4335;
+    --orange: #fbbc04;
+    --gray: #5f6368;
+    --light: #f8f9fa;
+    --border: #dadce0;
+    --dark: #202124;
+    --card-shadow: 0 1px 6px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f1f3f4; color: var(--dark); font-size: 14px; }
+
+  /* HEADER */
+  .header { background: linear-gradient(135deg, #1a237e 0%, #1565c0 50%, #1976d2 100%); color: white; padding: 28px 40px 20px; }
+  .header h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.3px; }
+  .header .meta { font-size: 13px; opacity: 0.8; margin-top: 6px; display: flex; gap: 20px; flex-wrap: wrap; }
+  .header .meta span::before { content: "• "; }
+  .header .meta span:first-child::before { content: ""; }
+
+  /* NAV TABS */
+  .nav { background: white; border-bottom: 1px solid var(--border); display: flex; padding: 0 40px; overflow-x: auto; sticky; top: 0; z-index: 100; }
+  .nav-tab { padding: 14px 20px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--gray); border-bottom: 3px solid transparent; white-space: nowrap; transition: all .2s; }
+  .nav-tab:hover { color: var(--blue); background: #f0f4ff; }
+  .nav-tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  /* LAYOUT */
+  .content { padding: 24px 40px; max-width: 1400px; margin: 0 auto; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* CARDS */
+  .card { background: white; border-radius: 8px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 16px; }
+  .card h3 { font-size: 14px; font-weight: 600; color: var(--gray); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+
+  /* METRIC GRIDS */
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .metric-card { background: white; border-radius: 8px; box-shadow: var(--card-shadow); padding: 16px 20px; border-left: 4px solid var(--blue); }
+  .metric-card.green { border-left-color: var(--green); }
+  .metric-card.red { border-left-color: var(--red); }
+  .metric-card.orange { border-left-color: var(--orange); }
+  .metric-card.purple { border-left-color: #9c27b0; }
+  .metric-label { font-size: 11px; color: var(--gray); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px; }
+  .metric-value { font-size: 26px; font-weight: 700; color: var(--dark); line-height: 1; }
+  .metric-sub { font-size: 11px; color: var(--gray); margin-top: 4px; }
+
+  /* STATUS BADGES */
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: #e6f4ea; color: #1e8e3e; }
+  .badge-red { background: #fce8e6; color: #c5221f; }
+  .badge-orange { background: #fef7e0; color: #b06000; }
+  .badge-blue { background: #e8f0fe; color: #1967d2; }
+
+  /* CAMPAIGN CARDS */
+  .campaign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .campaign-card { background: white; border-radius: 8px; box-shadow: var(--card-shadow); overflow: hidden; }
+  .campaign-header { padding: 16px 20px 12px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .campaign-name { font-weight: 700; font-size: 15px; }
+  .campaign-body { padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+  .stat-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--gray); }
+  .stat-value { font-weight: 600; }
+  .stat-value.over { color: var(--red); }
+  .stat-value.ok { color: var(--green); }
+
+  /* ISSUES */
+  .issue { display: flex; gap: 12px; padding: 14px; border-radius: 8px; margin-bottom: 10px; align-items: flex-start; }
+  .issue.critical { background: #fce8e6; border-left: 4px solid var(--red); }
+  .issue.warning { background: #fef7e0; border-left: 4px solid var(--orange); }
+  .issue.info { background: #e8f0fe; border-left: 4px solid var(--blue); }
+  .issue-icon { font-size: 18px; margin-top: -1px; }
+  .issue-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .issue-desc { font-size: 12px; color: var(--gray); line-height: 1.5; }
+  .issue-badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px; margin-left: 8px; background: rgba(0,0,0,.08); }
+
+  /* EXPERIMENTS */
+  .exp-card { background: white; border-radius: 8px; box-shadow: var(--card-shadow); padding: 20px; margin-bottom: 14px; border-left: 4px solid var(--blue); }
+  .exp-card.high { border-left-color: #ea4335; }
+  .exp-card.medium { border-left-color: #fbbc04; }
+  .exp-card.low { border-left-color: #34a853; }
+  .exp-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .exp-num { width: 28px; height: 28px; border-radius: 50%; background: var(--blue); color: white; font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .exp-num.high { background: var(--red); }
+  .exp-num.medium { background: var(--orange); }
+  .exp-title { font-weight: 700; font-size: 15px; }
+  .exp-priority { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 8px; }
+  .exp-priority.high { background: #fce8e6; color: #c5221f; }
+  .exp-priority.medium { background: #fef7e0; color: #b06000; }
+  .exp-priority.low { background: #e6f4ea; color: #1e8e3e; }
+  .exp-body { font-size: 13px; color: var(--gray); line-height: 1.7; }
+  .exp-body p { margin-bottom: 8px; }
+  .exp-steps { margin: 10px 0 10px 0; padding-left: 0; }
+  .exp-steps li { list-style: none; padding: 4px 0 4px 22px; position: relative; font-size: 12px; color: #444; }
+  .exp-steps li::before { content: "→"; position: absolute; left: 0; color: var(--blue); font-weight: 700; }
+  .exp-outcome { background: #f0f4ff; border-radius: 6px; padding: 10px 14px; font-size: 12px; margin-top: 10px; }
+  .exp-outcome strong { color: var(--blue); }
+
+  /* CHART CONTAINERS */
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .chart-row.single { grid-template-columns: 1fr; }
+  .chart-container { position: relative; height: 250px; }
+
+  /* ASSET TABLE */
+  table.asset-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  table.asset-table th { background: #f8f9fa; padding: 8px 12px; text-align: left; font-weight: 600; color: var(--gray); font-size: 11px; text-transform: uppercase; letter-spacing: .3px; border-bottom: 2px solid var(--border); }
+  table.asset-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.asset-table tr:hover td { background: #f8f9fa; }
+  .rating-best { color: #1e8e3e; font-weight: 700; }
+  .rating-good { color: #1967d2; font-weight: 600; }
+  .rating-low { color: #c5221f; font-weight: 700; }
+  .rating-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+  .dot-best { background: #34a853; }
+  .dot-good { background: #1a73e8; }
+  .dot-low { background: #ea4335; }
+
+  /* PROGRESS BARS */
+  .progress-wrap { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .progress-label { width: 140px; font-size: 12px; color: var(--gray); flex-shrink: 0; }
+  .progress-bar { flex: 1; height: 10px; background: #e8eaed; border-radius: 5px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 5px; transition: width .6s ease; }
+  .progress-value { width: 60px; font-size: 12px; font-weight: 600; text-align: right; flex-shrink: 0; }
+
+  /* TIMELINE */
+  .timeline { position: relative; padding-left: 24px; }
+  .timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .timeline-item { position: relative; margin-bottom: 20px; }
+  .timeline-dot { position: absolute; left: -20px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--blue); border: 2px solid white; box-shadow: 0 0 0 2px var(--blue); }
+  .timeline-dot.done { background: var(--green); box-shadow: 0 0 0 2px var(--green); }
+  .timeline-title { font-weight: 600; font-size: 13px; margin-bottom: 3px; }
+  .timeline-desc { font-size: 12px; color: var(--gray); line-height: 1.5; }
+
+  /* SCROLLABLE TABLE */
+  .table-wrap { overflow-x: auto; }
+
+  @media (max-width: 768px) {
+    .content { padding: 16px 16px; }
+    .header { padding: 20px 16px 16px; }
+    .nav { padding: 0 16px; }
+    .chart-row { grid-template-columns: 1fr; }
+    .campaign-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>📊 UAC Campaign Audit — Man Matters 2.0</h1>
+  <div class="meta">
+    <span>Account: 241-108-5176</span>
+    <span>Audit Date: 23 Mar 2026</span>
+    <span>Period: 21 Feb – 22 Mar 2026 (30 days)</span>
+    <span>Platform: Google Ads (Android UAC)</span>
+    <span>Audited by: Claude / Mosaic Wellness</span>
+  </div>
+</div>
+
+<div class="nav">
+  <div class="nav-tab active" onclick="showTab('overview')">📈 Overview</div>
+  <div class="nav-tab" onclick="showTab('hair01')">💈 UAC-Hair-01</div>
+  <div class="nav-tab" onclick="showTab('beard01')">🧔 UAC-Beard-01</div>
+  <div class="nav-tab" onclick="showTab('tier23')">🎯 Tier 2-3 Campaigns</div>
+  <div class="nav-tab" onclick="showTab('issues')">⚠️ Issues Found</div>
+  <div class="nav-tab" onclick="showTab('strategy')">🚀 Scaling Strategy</div>
+</div>
+
+<div class="content">
+
+<!-- ==================== OVERVIEW TAB ==================== -->
+<div id="tab-overview" class="tab-panel active">
+
+  <div class="metric-grid">
+    <div class="metric-card blue">
+      <div class="metric-label">Total UAC Spend (30d)</div>
+      <div class="metric-value">₹1.96Cr</div>
+      <div class="metric-sub">₹65,244/day average</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">Total NC / Day (UAC)</div>
+      <div class="metric-value">~101</div>
+      <div class="metric-sub">Hair: ~93/d · Beard: ~8/d</div>
+    </div>
+    <div class="metric-card orange">
+      <div class="metric-label">Active Campaigns</div>
+      <div class="metric-value">4</div>
+      <div class="metric-sub">2 Hair + 2 Beard</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-label">Campaigns with Issues</div>
+      <div class="metric-value">3 / 4</div>
+      <div class="metric-sub">Bid limit, policy blocks</div>
+    </div>
+    <div class="metric-card purple">
+      <div class="metric-label">Budget Under-utilised</div>
+      <div class="metric-value">~46%</div>
+      <div class="metric-sub">Across Hair-01 & Beard-01</div>
+    </div>
+    <div class="metric-card blue">
+      <div class="metric-label">Total NC in 30 Days</div>
+      <div class="metric-value">3,040</div>
+      <div class="metric-sub">Hair: 2,796 · Beard: 244</div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <h3>NC Contribution by Campaign (30 Days)</h3>
+      <div class="chart-container"><canvas id="chartNcSplit"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Actual CPA vs Target CPA</h3>
+      <div class="chart-container"><canvas id="chartCPA"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Campaign Summary Table</h3>
+    <div class="table-wrap">
+    <table class="asset-table">
+      <thead>
+        <tr>
+          <th>Campaign</th>
+          <th>Status</th>
+          <th>Budget/Day</th>
+          <th>Avg Spend/Day</th>
+          <th>Utilisation</th>
+          <th>Target CPA</th>
+          <th>Actual CPA</th>
+          <th>Purchases (30d)</th>
+          <th>NC/Day</th>
+          <th>Conversion Goal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>UAC-Hair-01</strong></td>
+          <td><span class="badge badge-red">Bid limit + Policy</span></td>
+          <td>₹1,00,000</td>
+          <td>₹49,927</td>
+          <td style="color:#ea4335;font-weight:700">50%</td>
+          <td>₹480</td>
+          <td style="color:#ea4335;font-weight:700">₹542.69</td>
+          <td>2,760</td>
+          <td><strong>92</strong></td>
+          <td>hair_PURCHASED</td>
+        </tr>
+        <tr>
+          <td><strong>UAC-Beard-01</strong></td>
+          <td><span class="badge badge-red">Bid limit</span></td>
+          <td>₹25,000</td>
+          <td>₹11,608</td>
+          <td style="color:#ea4335;font-weight:700">46%</td>
+          <td>₹850</td>
+          <td style="color:#ea4335;font-weight:700">₹1,475.63</td>
+          <td>236</td>
+          <td><strong>7.9</strong></td>
+          <td>beard_PURCHASED</td>
+        </tr>
+        <tr>
+          <td><strong>UAC-Beard-Tier(2-3)-01</strong></td>
+          <td><span class="badge badge-green">Eligible</span></td>
+          <td>₹4,000</td>
+          <td>₹1,851</td>
+          <td style="color:#fbbc04;font-weight:700">46%</td>
+          <td>None (Max Conv)</td>
+          <td>₹6,940</td>
+          <td>8</td>
+          <td><strong>0.3</strong></td>
+          <td>beard_PURCHASED</td>
+        </tr>
+        <tr>
+          <td><strong>UAC-Hair-Tier(2-3)-01</strong></td>
+          <td><span class="badge badge-orange">Policy block</span></td>
+          <td>₹4,000</td>
+          <td>₹1,858</td>
+          <td style="color:#fbbc04;font-weight:700">46%</td>
+          <td>None (Max Conv)</td>
+          <td>₹1,548</td>
+          <td>36</td>
+          <td><strong>1.2</strong></td>
+          <td>hair_PURCHASED</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Budget Utilisation</h3>
+    <div class="progress-wrap">
+      <div class="progress-label">UAC-Hair-01</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:50%;background:#ea4335"></div></div>
+      <div class="progress-value" style="color:#ea4335">50%</div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label">UAC-Beard-01</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:46%;background:#ea4335"></div></div>
+      <div class="progress-value" style="color:#ea4335">46%</div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label">UAC-Beard-Tier(2-3)</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:46%;background:#fbbc04"></div></div>
+      <div class="progress-value" style="color:#fbbc04">46%</div>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label">UAC-Hair-Tier(2-3)</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:46%;background:#fbbc04"></div></div>
+      <div class="progress-value" style="color:#fbbc04">46%</div>
+    </div>
+    <p style="font-size:12px;color:var(--gray);margin-top:10px;">💡 <strong>₹64,200/day potential spend is being left on the table</strong> due to bid constraints and policy issues. Addressing the root causes is the primary path to scaling.</p>
+  </div>
+
+</div>
+
+<!-- ==================== HAIR-01 TAB ==================== -->
+<div id="tab-hair01" class="tab-panel">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+    <h2 style="font-size:20px;font-weight:700">💈 UAC-Hair-01</h2>
+    <span class="badge badge-red">Limited by Bid Strategy</span>
+    <span class="badge badge-orange">All Ad Groups Limited by Policy</span>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric-card blue">
+      <div class="metric-label">Daily Budget</div>
+      <div class="metric-value">₹1L</div>
+      <div class="metric-sub">₹1,00,000/day</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-label">Avg Daily Spend</div>
+      <div class="metric-value">₹49.9k</div>
+      <div class="metric-sub">Only 50% of budget used</div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">NC / Day (Hair)</div>
+      <div class="metric-value">~92</div>
+      <div class="metric-sub">2,760 purchases in 30 days</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-label">Target CPA</div>
+      <div class="metric-value">₹480</div>
+      <div class="metric-sub">Actual: ₹542.69 (+13%)</div>
+    </div>
+    <div class="metric-card orange">
+      <div class="metric-label">Total Spend (30d)</div>
+      <div class="metric-value">₹1.50Cr</div>
+      <div class="metric-sub">₹14,97,816</div>
+    </div>
+    <div class="metric-card blue">
+      <div class="metric-label">Impressions (30d)</div>
+      <div class="metric-value">78.8L</div>
+      <div class="metric-sub">7,880,999 impressions</div>
+    </div>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <h3>CPA Gap Analysis</h3>
+      <div class="chart-container"><canvas id="chartHairCPA"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Budget vs Actual Spend</h3>
+      <div class="chart-container"><canvas id="chartHairBudget"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Campaign Settings</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div class="stat-row"><span class="stat-label">Campaign ID</span><span class="stat-value">22350139180</span></div>
+        <div class="stat-row"><span class="stat-label">App</span><span class="stat-value">Man Matters (Android)</span></div>
+        <div class="stat-row"><span class="stat-label">Bidding Strategy</span><span class="stat-value">In-App Actions (Target CPA)</span></div>
+        <div class="stat-row"><span class="stat-label">Primary Conversion</span><span class="stat-value">hair_PURCHASED (Firebase)</span></div>
+        <div class="stat-row"><span class="stat-label">Target CPA</span><span class="stat-value over">₹480</span></div>
+      </div>
+      <div>
+        <div class="stat-row"><span class="stat-label">Location</span><span class="stat-value">India (All)</span></div>
+        <div class="stat-row"><span class="stat-label">Start Date</span><span class="stat-value">17 March 2025</span></div>
+        <div class="stat-row"><span class="stat-label">View-Through Opt.</span><span class="stat-value over">OFF</span></div>
+        <div class="stat-row"><span class="stat-label">Data Feed</span><span class="stat-value over">Not Connected</span></div>
+        <div class="stat-row"><span class="stat-label">Optimisation Score</span><span class="stat-value">89.7%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Ad Group Status</h3>
+    <div class="issue warning">
+      <div class="issue-icon">⚠️</div>
+      <div>
+        <div class="issue-title">Hair-English — Limited by Policy <span class="badge badge-orange">1 of 1 ad groups affected</span></div>
+        <div class="issue-desc">The only ad group in this campaign has creative assets flagged for policy violations. This restricts ad serving and is one of the two primary reasons budget is not being fully spent. Policy issues in healthcare/hair care ads often relate to unsubstantiated medical claims or restricted health category language.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Asset Performance (41 Total Assets)</h3>
+    <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="text-align:center;padding:12px 20px;background:#e6f4ea;border-radius:8px;">
+        <div style="font-size:22px;font-weight:700;color:#1e8e3e">Best</div>
+        <div style="font-size:12px;color:var(--gray)">✅ 2 descriptions<br>✅ 1 headline<br>✅ 1 video</div>
+      </div>
+      <div style="text-align:center;padding:12px 20px;background:#e8f0fe;border-radius:8px;">
+        <div style="font-size:22px;font-weight:700;color:#1967d2">Good</div>
+        <div style="font-size:12px;color:var(--gray)">🔵 Multiple assets<br>🔵 Images & videos<br>🔵 Headlines</div>
+      </div>
+      <div style="text-align:center;padding:12px 20px;background:#fce8e6;border-radius:8px;">
+        <div style="font-size:22px;font-weight:700;color:#c5221f">Low</div>
+        <div style="font-size:12px;color:var(--gray)">🔴 3 descriptions<br>🔴 2 headlines<br>🔴 3 videos</div>
+      </div>
+    </div>
+    <table class="asset-table">
+      <thead>
+        <tr><th>Asset</th><th>Type</th><th>Rating</th><th>Recommendation</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>App exclusive tips &amp; zero side effects on hair loss journey now</td><td>Description</td><td><span class="rating-dot dot-best"></span><span class="rating-best">Best</span></td><td>Keep — top performer</td></tr>
+        <tr><td>Get expert tips on hair care...</td><td>Description</td><td><span class="rating-dot dot-best"></span><span class="rating-best">Best</span></td><td>Keep — top performer</td></tr>
+        <tr><td>3 Low-rated descriptions</td><td>Description</td><td><span class="rating-dot dot-low"></span><span class="rating-low">Low</span></td><td>🔴 Replace immediately</td></tr>
+        <tr><td>2 Low-rated headlines</td><td>Headline</td><td><span class="rating-dot dot-low"></span><span class="rating-low">Low</span></td><td>🔴 Replace immediately</td></tr>
+        <tr><td>Videos: 0:25, 0:59, 0:07</td><td>YouTube Video</td><td><span class="rating-dot dot-low"></span><span class="rating-low">Low</span></td><td>🔴 Replace with new cuts</td></tr>
+        <tr><td>Multiple other videos &amp; images</td><td>Mixed</td><td><span class="rating-dot dot-good"></span><span class="rating-good">Good</span></td><td>Retain and A/B test</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ==================== BEARD-01 TAB ==================== -->
+<div id="tab-beard01" class="tab-panel">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+    <h2 style="font-size:20px;font-weight:700">🧔 UAC-Beard-01</h2>
+    <span class="badge badge-red">Limited by Bid Strategy</span>
+  </div>
+
+  <div class="metric-grid">
+    <div class="metric-card blue">
+      <div class="metric-label">Daily Budget</div>
+      <div class="metric-value">₹25k</div>
+      <div class="metric-sub">₹25,000/day</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-label">Avg Daily Spend</div>
+      <div class="metric-value">₹11.6k</div>
+      <div class="metric-sub">Only 46% of budget used</div>
+    </div>
+    <div class="metric-card orange">
+      <div class="metric-label">NC / Day (Beard)</div>
+      <div class="metric-value">~7.9</div>
+      <div class="metric-sub">236 purchases in 30 days</div>
+    </div>
+    <div class="metric-card red">
+      <div class="metric-label">Target CPA</div>
+      <div class="metric-value">₹850</div>
+      <div class="metric-sub">Actual: ₹1,475.63 (+73%!)</div>
+    </div>
+    <div class="metric-card orange">
+      <div class="metric-label">Total Spend (30d)</div>
+      <div class="metric-value">₹3.48L</div>
+      <div class="metric-sub">₹3,48,248</div>
+    </div>
+    <div class="metric-card blue">
+      <div class="metric-label">Installations (30d)</div>
+      <div class="metric-value">7,185</div>
+      <div class="metric-sub">₹48.47 cost/install</div>
+    </div>
+  </div>
+
+  <div class="card" style="background:#fce8e6;border-left:4px solid var(--red);">
+    <h3 style="color:#c5221f">🚨 Critical Issue: CPA is 73% above Target</h3>
+    <p style="font-size:13px;margin-top:8px;line-height:1.7;">The beard campaign's actual CPA of <strong>₹1,475.63</strong> is nearly double the target of <strong>₹850</strong>. This is the single biggest constraint on the beard vertical. Google's algorithm cannot find enough users who convert at the ₹850 CPA threshold, so it severely limits spend. The campaign gets only 7.9 purchases/day despite having a ₹25,000/day budget — spending just ₹11,600/day of it.</p>
+    <p style="font-size:13px;margin-top:8px;line-height:1.7;"><strong>Root cause:</strong> The beard purchase intent audience may be naturally smaller or require higher bids to reach. The ₹850 target may have been set based on outdated data or aspirational targets rather than what the algorithm can actually achieve.</p>
+  </div>
+
+  <div class="chart-row">
+    <div class="card">
+      <h3>CPA: Target vs Actual</h3>
+      <div class="chart-container"><canvas id="chartBeardCPA"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Conversions Breakdown</h3>
+      <div class="chart-container"><canvas id="chartBeardConv"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Campaign Settings</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div class="stat-row"><span class="stat-label">Campaign ID</span><span class="stat-value">22435378968</span></div>
+        <div class="stat-row"><span class="stat-label">App</span><span class="stat-value">Man Matters (Android)</span></div>
+        <div class="stat-row"><span class="stat-label">Bidding Strategy</span><span class="stat-value">In-App Actions (Target CPA)</span></div>
+        <div class="stat-row"><span class="stat-label">Primary Conversion</span><span class="stat-value">beard_PURCHASED (Firebase)</span></div>
+        <div class="stat-row"><span class="stat-label">Target CPA</span><span class="stat-value over">₹850 (actual 73% over)</span></div>
+      </div>
+      <div>
+        <div class="stat-row"><span class="stat-label">Location</span><span class="stat-value">India (All)</span></div>
+        <div class="stat-row"><span class="stat-label">Start Date</span><span class="stat-value">15 April 2025</span></div>
+        <div class="stat-row"><span class="stat-label">View-Through Opt.</span><span class="stat-value over">OFF</span></div>
+        <div class="stat-row"><span class="stat-label">Data Feed</span><span class="stat-value over">Not Connected</span></div>
+        <div class="stat-row"><span class="stat-label">Ad Group Status</span><span class="stat-value ok">Eligible</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Asset Performance (40 Total Assets)</h3>
+    <div style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
+      <div style="text-align:center;padding:12px 20px;background:#e6f4ea;border-radius:8px;">
+        <div style="font-size:22px;font-weight:700;color:#1e8e3e">Best</div>
+        <div style="font-size:12px;color:var(--gray)">✅ Key descriptions<br>✅ Top headlines<br>✅ Best videos (0:32)</div>
+      </div>
+      <div style="text-align:center;padding:12px 20px;background:#fce8e6;border-radius:8px;">
+        <div style="font-size:22px;font-weight:700;color:#c5221f">Low</div>
+        <div style="font-size:12px;color:var(--gray)">🔴 3 descriptions<br>🔴 3 headlines<br>🔴 Multiple low videos</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--gray);">Low-rated assets drag quality score and reduce Google's confidence in the creative mix. Replacing them with fresh assets aligned to what's already working (reward/savings/growth messaging) is recommended.</p>
+  </div>
+</div>
+
+<!-- ==================== TIER 2-3 TAB ==================== -->
+<div id="tab-tier23" class="tab-panel">
+  <h2 style="font-size:20px;font-weight:700;margin-bottom:18px;">🎯 Tier 2-3 Campaigns</h2>
+
+  <div class="campaign-grid">
+    <!-- Beard Tier -->
+    <div class="campaign-card">
+      <div class="campaign-header" style="background:#e6f4ea;">
+        <div>
+          <div class="campaign-name">UAC-Beard-Tier(2-3)-01</div>
+          <div style="font-size:12px;color:var(--gray);margin-top:3px;">Campaign ID: 23100303832</div>
+        </div>
+        <span class="badge badge-green">✅ Eligible</span>
+      </div>
+      <div class="campaign-body">
+        <div class="stat-row"><span class="stat-label">Budget</span><span class="stat-value">₹4,000/day</span></div>
+        <div class="stat-row"><span class="stat-label">Avg Spend</span><span class="stat-value">₹1,851/day (46%)</span></div>
+        <div class="stat-row"><span class="stat-label">Bidding</span><span class="stat-value ok">Maximize Conversions (No CPA)</span></div>
+        <div class="stat-row"><span class="stat-label">Conversion Goal</span><span class="stat-value">beard_PURCHASED</span></div>
+        <div class="stat-row"><span class="stat-label">Start Date</span><span class="stat-value">9 Oct 2025</span></div>
+        <div class="stat-row"><span class="stat-label">Location Exclusions</span><span class="stat-value">23 Tier-1 cities excluded</span></div>
+        <div class="stat-row"><span class="stat-label">Installations (30d)</span><span class="stat-value">610</span></div>
+        <div class="stat-row"><span class="stat-label">Beard Purchases (30d)</span><span class="stat-value over">8 (0.3/day)</span></div>
+        <div class="stat-row"><span class="stat-label">Cost / Purchase</span><span class="stat-value over">₹6,940</span></div>
+        <div class="stat-row"><span class="stat-label">View-Through Conv.</span><span class="stat-value">672</span></div>
+      </div>
+    </div>
+
+    <!-- Hair Tier -->
+    <div class="campaign-card">
+      <div class="campaign-header" style="background:#fef7e0;">
+        <div>
+          <div class="campaign-name">UAC-Hair-Tier(2-3)-01</div>
+          <div style="font-size:12px;color:var(--gray);margin-top:3px;">Campaign ID: 23100305179</div>
+        </div>
+        <span class="badge badge-orange">⚠️ Policy Block</span>
+      </div>
+      <div class="campaign-body">
+        <div class="stat-row"><span class="stat-label">Budget</span><span class="stat-value">₹4,000/day</span></div>
+        <div class="stat-row"><span class="stat-label">Avg Spend</span><span class="stat-value">₹1,858/day (46%)</span></div>
+        <div class="stat-row"><span class="stat-label">Bidding</span><span class="stat-value ok">Maximize Conversions (No CPA)</span></div>
+        <div class="stat-row"><span class="stat-label">Conversion Goal</span><span class="stat-value">hair_PURCHASED</span></div>
+        <div class="stat-row"><span class="stat-label">Start Date</span><span class="stat-value">9 Oct 2025</span></div>
+        <div class="stat-row"><span class="stat-label">Location Exclusions</span><span class="stat-value">23 Tier-1 cities excluded</span></div>
+        <div class="stat-row"><span class="stat-label">Installations (30d)</span><span class="stat-value">377</span></div>
+        <div class="stat-row"><span class="stat-label">Hair Purchases (30d)</span><span class="stat-value">36 (1.2/day)</span></div>
+        <div class="stat-row"><span class="stat-label">Cost / Purchase</span><span class="stat-value over">₹1,548</span></div>
+        <div class="stat-row"><span class="stat-label">Ad Group Issue</span><span class="stat-value over">Hair-English – Policy Block</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px;">
+    <h3>Tier 2-3 Analysis</h3>
+    <p style="font-size:13px;line-height:1.7;margin-bottom:12px;">Both Tier 2-3 campaigns are small experimental campaigns (₹4k/day budget) targeting India minus 23 Tier-1 cities. They use <strong>Maximize Conversions (no Target CPA)</strong>, which is why they show as "Eligible" unlike the main campaigns.</p>
+    <div class="issue warning">
+      <div class="issue-icon">📊</div>
+      <div>
+        <div class="issue-title">Low Purchase-to-Install Ratio in Tier 2-3</div>
+        <div class="issue-desc">Beard Tier(2-3): Only 8 purchases from 610 installs = 1.3% conversion rate<br>Hair Tier(2-3): Only 36 purchases from 377 installs = 9.5% conversion rate<br><br>The install-to-purchase conversion rate in Tier 2-3 areas is much lower than Tier 1, suggesting these users install but don't purchase. The effective CPA per purchase is extremely high (₹6,940 for beard). <strong>ROI of the Beard Tier(2-3) campaign is questionable.</strong></div>
+      </div>
+    </div>
+    <div class="issue info">
+      <div class="issue-icon">💡</div>
+      <div>
+        <div class="issue-title">Both campaigns use Maximize Conversions without any CPA guard-rail</div>
+        <div class="issue-desc">While this explains why they're "Eligible" (no bid limit), it also means Google has no cost constraint and can spend on any inventory. Adding a Target CPA of ₹1,000-1,200 for hair or ₹3,000 for beard could help quality over quantity, though volume will drop further.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ISSUES TAB ==================== -->
+<div id="tab-issues" class="tab-panel">
+  <h2 style="font-size:20px;font-weight:700;margin-bottom:18px;">⚠️ Issues Found — Prioritised</h2>
+
+  <div style="margin-bottom:20px;">
+    <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+      <span style="font-size:13px;font-weight:600;padding:4px 12px;background:#fce8e6;border-radius:20px;color:#c5221f">🔴 Critical (2)</span>
+      <span style="font-size:13px;font-weight:600;padding:4px 12px;background:#fef7e0;border-radius:20px;color:#b06000">🟡 Warning (3)</span>
+      <span style="font-size:13px;font-weight:600;padding:4px 12px;background:#e8f0fe;border-radius:20px;color:#1967d2">🔵 Improvement (3)</span>
+    </div>
+  </div>
+
+  <!-- Critical Issues -->
+  <div class="issue critical">
+    <div class="issue-icon">🚨</div>
+    <div>
+      <div class="issue-title">CRITICAL #1 — UAC-Hair-01 & Beard-01: "Limited by Bid Strategy" <span class="issue-badge">Root Cause of Under-spend</span></div>
+      <div class="issue-desc"><strong>What's happening:</strong> UAC-Hair-01 actual CPA (₹542.69) is 13% over the ₹480 target. UAC-Beard-01 actual CPA (₹1,475.63) is 73% over the ₹850 target. When actual CPA exceeds the target, Google's algorithm becomes conservative and restricts the campaign from bidding on more inventory — it "protects" you from overpaying.<br><br><strong>Impact:</strong> ₹62,870/day of budget is sitting idle (Hair-01: ₹50,073/day + Beard-01: ₹13,392/day). Over 30 days, this is ₹1.89Cr of unspent budget potential.<br><br><strong>Resolution:</strong> Either (a) gradually relax Target CPA to match actual performance, or (b) work to lower actual CPA through creative improvements to meet the current target. See Scaling Strategy tab.</div>
+    </div>
+  </div>
+
+  <div class="issue critical">
+    <div class="issue-icon">🚨</div>
+    <div>
+      <div class="issue-title">CRITICAL #2 — Hair Policy Violations (3 of 4 campaigns affected) <span class="issue-badge">Restricts Ad Serving</span></div>
+      <div class="issue-desc"><strong>What's happening:</strong> UAC-Hair-01 (Hair-English ad group), UAC-Hair-Tier(2-3)-01 (Hair-English ad group) are flagged "Limited by Policy." This means some creative assets are violating Google's healthcare/medical advertising policies — typically unsubstantiated hair regrowth claims, before/after comparisons, or medical terminology without disclaimers.<br><br><strong>Impact:</strong> Ads cannot serve to the full eligible audience. This directly reduces impression share and NC volume.<br><br><strong>Resolution:</strong> Review the specific policy violation reason in the ad group details, update the flagged creatives to remove policy-violating language, and resubmit for review.</div>
+    </div>
+  </div>
+
+  <!-- Warnings -->
+  <div class="issue warning">
+    <div class="issue-icon">⚠️</div>
+    <div>
+      <div class="issue-title">WARNING #3 — Low-rated Assets Dragging Quality Across Campaigns</div>
+      <div class="issue-desc"><strong>UAC-Hair-01:</strong> 3 Low descriptions, 2 Low headlines, 3 Low videos (0:25, 0:59, 0:07 lengths)<br><strong>UAC-Beard-01:</strong> 3 Low descriptions, 3 Low headlines, multiple Low-rated videos<br><br>Low-rated assets reduce the algorithm's creative confidence. Google prioritises serving Best/Good assets and may suppress the entire ad group's delivery when too many Low assets exist. These should be replaced with fresh creatives modelled on the Best-performing ones.</div>
+    </div>
+  </div>
+
+  <div class="issue warning">
+    <div class="issue-icon">⚠️</div>
+    <div>
+      <div class="issue-title">WARNING #4 — UAC-Beard-01: Target CPA May Be Structurally Unachievable</div>
+      <div class="issue-desc">The ₹850 target CPA for beard purchases has a 73% gap vs actual performance (₹1,475). This suggests the ₹850 target was either set aspirationally or based on an earlier period when costs were lower. The beard vertical likely has a naturally higher CPA given smaller purchase intent audience. A CPA Simulator check on this campaign is highly recommended before deciding whether to raise the target or restructure the campaign.</div>
+    </div>
+  </div>
+
+  <div class="issue warning">
+    <div class="issue-icon">⚠️</div>
+    <div>
+      <div class="issue-title">WARNING #5 — Beard Tier(2-3): Very Low Purchase ROI</div>
+      <div class="issue-desc">Only 8 beard purchases from 610 installs (1.3% conversion rate) in 30 days. At ₹6,940/purchase, this campaign's ROI is extremely questionable. Compare: UAC-Hair-Tier(2-3) gets 36 purchases from 377 installs (9.5% conversion) — much better ratio. The beard Tier 2-3 audience may simply not be a strong purchase market. Budget reallocation should be evaluated.</div>
+    </div>
+  </div>
+
+  <!-- Improvements -->
+  <div class="issue info">
+    <div class="issue-icon">💡</div>
+    <div>
+      <div class="issue-title">IMPROVEMENT #6 — View-Through Conversion Optimisation is OFF on All Campaigns</div>
+      <div class="issue-desc">All 4 campaigns have View-Through Conversion Optimisation turned off. View-through attribution (users who saw an ad, didn't click, but later converted) is significant — Hair-01 alone recorded 2,760+ view-through conversions. Enabling this setting allows Google to factor in view-through signals when optimising bids, potentially improving reach to high-LTV audiences who convert via multi-touch journeys.</div>
+    </div>
+  </div>
+
+  <div class="issue info">
+    <div class="issue-icon">💡</div>
+    <div>
+      <div class="issue-title">IMPROVEMENT #7 — No Data Feed Connected to Any Campaign</div>
+      <div class="issue-desc">All 4 campaigns show "Data feed: Not connected." A product/content feed can help Google create more personalised ad experiences (especially for images and native ad formats) and improve targeting signals. For Man Matters, a product feed containing SKU-level data (hair kit, beard kit, subscription products) could improve conversion rates by showing more contextually relevant ads.</div>
+    </div>
+  </div>
+
+  <div class="issue info">
+    <div class="issue-icon">💡</div>
+    <div>
+      <div class="issue-title">IMPROVEMENT #8 — Android-Only; No iOS Campaigns</div>
+      <div class="issue-desc">All UAC campaigns are exclusively targeting Android devices. If Man Matters has iOS users (Apple App Store presence), a separate iOS UAC campaign could unlock an additional audience segment. iOS users in India tend to have higher purchasing power (Tier 1 demographics), potentially with better CPA economics for Hair products.</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ==================== STRATEGY TAB ==================== -->
+<div id="tab-strategy" class="tab-panel">
+  <h2 style="font-size:20px;font-weight:700;margin-bottom:6px;">🚀 Scaling Strategy — Experiments to Go from 100 to 150+ NC/day</h2>
+  <p style="font-size:13px;color:var(--gray);margin-bottom:20px;">The following experiments are ranked by expected impact and ease of execution. All are non-destructive changes that can be tested without touching the existing campaigns.</p>
+
+  <div class="exp-card high">
+    <div class="exp-header">
+      <div class="exp-num high">1</div>
+      <div class="exp-title">Fix Hair Policy Violations → Immediate Volume Unlock</div>
+      <span class="exp-priority high">🔴 Highest Priority</span>
+    </div>
+    <div class="exp-body">
+      <p><strong>The problem:</strong> Both hair campaigns have ad groups "limited by policy," directly suppressing impression volume and NC delivery.</p>
+      <ul class="exp-steps">
+        <li>Go to UAC-Hair-01 → Ad Groups → Hair-English → Check the "Policy" status detail</li>
+        <li>Identify which specific assets are flagged (descriptions, headlines, or videos)</li>
+        <li>Revise the copy: remove unverified medical claims ("regrows hair in X weeks"), replace with benefit language ("see visible improvement with regular use")</li>
+        <li>Resubmit assets for policy review (typically 1–3 business days)</li>
+        <li>Apply same fix to UAC-Hair-Tier(2-3)-01</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> 10–20% increase in impression share on hair campaigns. If Hair-01 is currently running at 50% budget utilisation partly due to policy, fixing policy could add 15–25 NC/day incrementally.</div>
+    </div>
+  </div>
+
+  <div class="exp-card high">
+    <div class="exp-header">
+      <div class="exp-num high">2</div>
+      <div class="exp-title">Relax UAC-Hair-01 Target CPA from ₹480 → ₹520 (Gradual Test)</div>
+      <span class="exp-priority high">🔴 Highest Priority</span>
+    </div>
+    <div class="exp-body">
+      <p><strong>The problem:</strong> The ₹480 Target CPA is too tight — actual CPA is ₹542.69 (13% over). This forces Google to hold back spend, wasting ₹50k/day of available budget.</p>
+      <ul class="exp-steps">
+        <li>Use the "Simulate campaign changes" tool in UAC-Hair-01 to preview volume at ₹510, ₹520, and ₹540</li>
+        <li>If simulator shows &gt;15% volume uplift at ₹520, create a new campaign <strong>UAC-Hair-02</strong> with ₹520 target CPA and ₹20,000–30,000/day budget</li>
+        <li>Keep UAC-Hair-01 unchanged (don't raise its CPA — risk of disrupting 92 NC/day)</li>
+        <li>Let UAC-Hair-02 run for 14 days before evaluating</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> If UAC-Hair-02 achieves even 50% budget utilisation at ₹520 CPA with a ₹25k/day budget, that's ~48 additional NC/day. A 30k/day budget → 57 NC/day, getting you to 150 NC/day total.</div>
+    </div>
+  </div>
+
+  <div class="exp-card medium">
+    <div class="exp-header">
+      <div class="exp-num medium">3</div>
+      <div class="exp-title">Creative Refresh — Replace All Low-Rated Assets</div>
+      <span class="exp-priority medium">🟡 High Priority</span>
+    </div>
+    <div class="exp-body">
+      <p><strong>The problem:</strong> Both Hair-01 and Beard-01 have multiple "Low" rated assets. These drag quality, reduce Google's confidence, and dilute the overall creative mix.</p>
+      <ul class="exp-steps">
+        <li><strong>Hair-01:</strong> Replace 3 Low descriptions, 2 Low headlines, 3 Low videos (0:25, 0:59, 0:07 lengths)</li>
+        <li><strong>Beard-01:</strong> Replace 3 Low descriptions, 3 Low headlines, multiple Low-rated videos</li>
+        <li>New creative themes to test: <strong>Reward/savings angle</strong> (top-performing theme based on Best assets), social proof ("50,000+ men transformed"), problem-solution framing</li>
+        <li>For videos: Focus on 0:15–0:30 length (best performing range for UAC)</li>
+        <li>Add assets as new ad groups first to A/B test before replacing the originals</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> Better creative quality → improved install-to-purchase CVR → lower actual CPA → algorithm serves more. Even a 5–10% CPA improvement on Hair-01 could close the gap to the ₹480 target and unlock 10–20 NC/day.</div>
+    </div>
+  </div>
+
+  <div class="exp-card medium">
+    <div class="exp-header">
+      <div class="exp-num medium">4</div>
+      <div class="exp-title">New Ad Group in UAC-Hair-01 — Hair-English-02 (Separate Creative Set)</div>
+      <span class="exp-priority medium">🟡 High Priority</span>
+    </div>
+    <div class="exp-body">
+      <p><strong>The strategy:</strong> Rather than editing the existing Hair-English ad group (which is the workhorse at 92 NC/day), create a <em>second</em> ad group within UAC-Hair-01 with a completely fresh creative set. This lets Google's algorithm discover new winning creatives without risking the existing performance.</p>
+      <ul class="exp-steps">
+        <li>Create "Hair-English-02" ad group in UAC-Hair-01</li>
+        <li>Upload 3–5 new headlines, 2–3 new descriptions, 3–5 new videos, 4–5 new images</li>
+        <li>Creative brief: Focus on <strong>app exclusivity + rewards + expert guidance</strong> messaging (themes that scored "Best" in existing assets)</li>
+        <li>Monitor for 7–14 days — Google will auto-allocate budget to better-performing ad group</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> If the new creative set achieves lower CPA than Hair-English, the campaign's overall CPA could drop below ₹480 — removing the bid strategy limitation and allowing full budget utilisation.</div>
+    </div>
+  </div>
+
+  <div class="exp-card medium">
+    <div class="exp-header">
+      <div class="exp-num medium">5</div>
+      <div class="exp-title">Beard-01: Run CPA Simulator + Incremental CPA Test</div>
+      <span class="exp-priority medium">🟡 Medium Priority</span>
+    </div>
+    <div class="exp-body">
+      <p><strong>The problem:</strong> UAC-Beard-01's actual CPA (₹1,475) is 73% above the ₹850 target. The beard category is significantly harder to scale at the current target.</p>
+      <ul class="exp-steps">
+        <li>Use "Simulate campaign changes" on UAC-Beard-01 to see projected volume at ₹1,000, ₹1,200, ₹1,500 CPA</li>
+        <li>If ₹1,200 shows 2x+ volume, create <strong>UAC-Beard-02</strong> with Target CPA ₹1,200 and ₹10,000/day budget</li>
+        <li>Run for 21 days and evaluate actual CPA vs target</li>
+        <li>Do NOT raise target on existing Beard-01 — keep it as the efficiency benchmark</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> Even at ₹1,200 CPA, if beard conversion improves from 7.9/day to 15/day, that is a meaningful NC contribution. Long-term goal: understand true beard CPA floor and set targets accordingly.</div>
+    </div>
+  </div>
+
+  <div class="exp-card" style="border-left-color:#9c27b0;">
+    <div class="exp-header">
+      <div class="exp-num" style="background:#9c27b0;">6</div>
+      <div class="exp-title">Enable View-Through Conversion Optimisation (Low Risk Test)</div>
+      <span class="exp-priority" style="background:#f3e5f5;color:#6a1b9a;">🟣 Medium Priority</span>
+    </div>
+    <div class="exp-body">
+      <p>All 4 campaigns have View-Through Conversion Optimisation turned OFF. Enabling it allows Google to value and bid on users who see ads without clicking but eventually convert.</p>
+      <ul class="exp-steps">
+        <li>Start with UAC-Beard-Tier(2-3)-01 (safest — smallest, no other issues)</li>
+        <li>Enable View-Through Conversion Optimisation and monitor for 14 days</li>
+        <li>If CPA holds or improves, roll out to UAC-Hair-Tier(2-3)-01, then the main campaigns</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> Google can reach more users in the consideration phase. View-through signals may improve the algorithm's user targeting, reducing CPA and increasing conversion volume over time.</div>
+    </div>
+  </div>
+
+  <div class="exp-card" style="border-left-color:#34a853;">
+    <div class="exp-header">
+      <div class="exp-num" style="background:#34a853;">7</div>
+      <div class="exp-title">Scale UAC-Hair-Tier(2-3)-01 Budget After Policy Fix</div>
+      <span class="exp-priority low">🟢 Medium Priority</span>
+    </div>
+    <div class="exp-body">
+      <p>Hair Tier(2-3) is getting 36 purchases/30 days at ₹1,548/purchase from Tier 2-3 areas. While the CPA is higher than Tier 1, the install-to-purchase rate (9.5%) is reasonable. Once the policy block is fixed (Experiment 1), this campaign could scale with additional budget.</p>
+      <ul class="exp-steps">
+        <li>First fix the policy issue in Hair-English ad group</li>
+        <li>After 7 days of Eligible status, test increasing budget from ₹4,000 to ₹8,000/day</li>
+        <li>Monitor CPA carefully — Tier 2-3 users may have lower LTV</li>
+        <li>Consider adding a ₹1,200 Target CPA guard-rail to prevent runaway costs</li>
+      </ul>
+      <div class="exp-outcome"><strong>Expected Outcome:</strong> Could add 3–8 incremental NC/day from Tier 2-3 hair segment. Not a volume multiplier but meaningful incremental contribution.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <h3>30-Day Scaling Roadmap</h3>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-title">Week 1: Fix Issues (Zero Risk)</div>
+        <div class="timeline-desc">Resolve policy violations in Hair-English ad groups (Hair-01 + Hair Tier 2-3). Replace all Low-rated assets with fresh creatives. Run CPA Simulator on both Hair-01 and Beard-01 to understand volume potential at higher CPA levels.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-title">Week 2: Launch New Experiments</div>
+        <div class="timeline-desc">Launch UAC-Hair-02 (new campaign) with ₹520 Target CPA and ₹20,000/day budget. Add Hair-English-02 ad group to UAC-Hair-01 with fresh creatives. Enable View-Through Optimisation on UAC-Beard-Tier(2-3)-01.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-title">Week 3: Evaluate + Iterate</div>
+        <div class="timeline-desc">Review UAC-Hair-02 performance. If CPA &lt; ₹540, increase its budget to ₹30,000/day. If Hair-English-02 showing better CPA, begin replacing underperforming assets in Hair-English. Launch UAC-Beard-02 test at ₹1,200 Target CPA.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot"></div>
+        <div class="timeline-title">Week 4: Scale Winners</div>
+        <div class="timeline-desc">Scale budget on any campaign/ad group achieving CPA at or below target. Target: 130–150 NC/day total UAC. Continue creative refresh cycle. Consider launching iOS UAC campaigns if Android scaling stalls.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- end .content -->
+
+<div style="background:#fff;border-top:1px solid var(--border);padding:14px 40px;font-size:11px;color:var(--gray);text-align:center;">
+  Audit conducted read-only. Zero changes made to campaigns, bids, budgets or settings. | Man Matters 2.0 UAC Audit | 23 March 2026
+</div>
+
+<script>
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// Chart: NC Split (Donut)
+new Chart(document.getElementById('chartNcSplit'), {
+  type: 'doughnut',
+  data: {
+    labels: ['UAC-Hair-01 (2,760)', 'UAC-Hair-Tier2-3 (36)', 'UAC-Beard-01 (236)', 'UAC-Beard-Tier2-3 (8)'],
+    datasets: [{ data: [2760, 36, 236, 8], backgroundColor: ['#1a73e8','#4fc3f7','#34a853','#81c995'], borderWidth: 2, borderColor: '#fff' }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { font: { size: 11 } } } } }
+});
+
+// Chart: CPA Comparison
+new Chart(document.getElementById('chartCPA'), {
+  type: 'bar',
+  data: {
+    labels: ['Hair-01', 'Beard-01', 'Hair Tier(2-3)', 'Beard Tier(2-3)'],
+    datasets: [
+      { label: 'Target CPA (₹)', data: [480, 850, null, null], backgroundColor: '#1a73e8aa', borderColor: '#1a73e8', borderWidth: 2 },
+      { label: 'Actual CPA (₹)', data: [542.69, 1475.63, 1548.66, 6940.58], backgroundColor: ['#ea4335aa','#ea4335aa','#fbbc04aa','#fbbc04aa'], borderColor: ['#ea4335','#ea4335','#fbbc04','#fbbc04'], borderWidth: 2 }
+    ]
+  },
+  options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + v } } }, plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } } }
+});
+
+// Chart: Hair CPA
+new Chart(document.getElementById('chartHairCPA'), {
+  type: 'bar',
+  data: {
+    labels: ['Target CPA', 'Actual CPA'],
+    datasets: [{ data: [480, 542.69], backgroundColor: ['#1a73e8','#ea4335'], borderRadius: 6 }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ₹' + ctx.parsed.x } } }, scales: { x: { beginAtZero: true, ticks: { callback: v => '₹' + v } } } }
+});
+
+// Chart: Hair Budget vs Spend
+new Chart(document.getElementById('chartHairBudget'), {
+  type: 'bar',
+  data: {
+    labels: ['Daily Budget', 'Avg Daily Spend', 'Unutilised Budget'],
+    datasets: [{ data: [100000, 49927, 50073], backgroundColor: ['#1a73e8','#34a853','#ea4335aa'], borderRadius: 6 }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ₹' + ctx.parsed.y.toLocaleString() } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => '₹' + (v/1000) + 'k' } } } }
+});
+
+// Chart: Beard CPA
+new Chart(document.getElementById('chartBeardCPA'), {
+  type: 'bar',
+  data: {
+    labels: ['Target CPA', 'Actual CPA'],
+    datasets: [{ data: [850, 1475.63], backgroundColor: ['#1a73e8','#ea4335'], borderRadius: 6 }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ₹' + ctx.parsed.x } } }, scales: { x: { beginAtZero: true, ticks: { callback: v => '₹' + v } } } }
+});
+
+// Chart: Beard Conversions
+new Chart(document.getElementById('chartBeardConv'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Installs (7,185)', 'beard_PURCHASED (236)'],
+    datasets: [{ data: [7185, 236], backgroundColor: ['#1a73e8','#34a853'], borderWidth: 2, borderColor: '#fff' }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } }
+});
+</script>
+</body>
+</html>
